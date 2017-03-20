@@ -1,18 +1,20 @@
 all: build
 
 FLAGS =
-ENVVAR = GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+COMMONENVVAR = GOOS=linux GOARCH=amd64
+BUILDENVVAR = CGO_ENABLED=0
+TESTENVVAR = 
 REGISTRY = gcr.io/google_containers
-TAG = v0.3.0
+TAG = $(shell git describe --abbrev=0)
 
 deps:
 	go get github.com/tools/godep
 
 build: clean deps
-	$(ENVVAR) godep go build -o kube-state-metrics 
+	$(COMMONENVVAR) $(BUILDENVVAR) godep go build -o kube-state-metrics 
 
 test-unit: clean deps build
-	$(ENVVAR) godep go test --race . $(FLAGS)
+	$(COMMONENVVAR) $(TESTENVVAR) godep go test --race . $(FLAGS)
 
 container: build
 	docker build -t ${REGISTRY}/kube-state-metrics:$(TAG) .

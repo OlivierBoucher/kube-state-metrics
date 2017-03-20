@@ -28,13 +28,17 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 
-	"k8s.io/client-go/1.5/pkg/api/v1"
-	"k8s.io/client-go/1.5/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/util/intstr"
 )
 
 var (
 	depl1Replicas int32 = 200
 	depl2Replicas int32 = 5
+
+	depl1MaxUnavailable = intstr.FromInt(10)
+	depl2MaxUnavailable = intstr.FromString("20%")
 )
 
 type mockDeploymentStore struct {
@@ -65,6 +69,8 @@ func TestDeploymentCollector(t *testing.T) {
 		# TYPE kube_deployment_status_replicas_updated gauge
 		# HELP kube_deployment_status_observed_generation The generation observed by the deployment controller.
 		# TYPE kube_deployment_status_observed_generation gauge
+                # HELP kube_deployment_spec_strategy_rollingupdate_max_unavailable Maximum number of unavailable replicas during a rolling update of a deployment.
+		# TYPE kube_deployment_spec_strategy_rollingupdate_max_unavailable gauge
 	`
 	cases := []struct {
 		depls []v1beta1.Deployment
@@ -87,6 +93,11 @@ func TestDeploymentCollector(t *testing.T) {
 					},
 					Spec: v1beta1.DeploymentSpec{
 						Replicas: &depl1Replicas,
+						Strategy: v1beta1.DeploymentStrategy{
+							RollingUpdate: &v1beta1.RollingUpdateDeployment{
+								MaxUnavailable: &depl1MaxUnavailable,
+							},
+						},
 					},
 				}, {
 					ObjectMeta: v1.ObjectMeta{
@@ -114,6 +125,9 @@ func TestDeploymentCollector(t *testing.T) {
 				kube_deployment_spec_paused{namespace="ns2",deployment="depl2"} 1
 				kube_deployment_spec_replicas{namespace="ns1",deployment="depl1"} 200
 				kube_deployment_spec_replicas{namespace="ns2",deployment="depl2"} 5
+				kube_deployment_spec_strategy_rollingupdate_max_unavailable{deployment="depl1",namespace="ns1"} 10
+				kube_deployment_status_observed_generation{namespace="ns1",deployment="depl1"} 111
+				kube_deployment_status_observed_generation{namespace="ns2",deployment="depl2"} 1111
 				kube_deployment_status_replicas{namespace="ns1",deployment="depl1"} 15
 				kube_deployment_status_replicas{namespace="ns2",deployment="depl2"} 10
 				kube_deployment_status_replicas_available{namespace="ns1",deployment="depl1"} 10
@@ -122,8 +136,6 @@ func TestDeploymentCollector(t *testing.T) {
 				kube_deployment_status_replicas_unavailable{namespace="ns2",deployment="depl2"} 0
 				kube_deployment_status_replicas_updated{namespace="ns1",deployment="depl1"} 2
 				kube_deployment_status_replicas_updated{namespace="ns2",deployment="depl2"} 1
-				kube_deployment_status_observed_generation{namespace="ns1",deployment="depl1"} 111
-				kube_deployment_status_observed_generation{namespace="ns2",deployment="depl2"} 1111
 			`,
 		},
 	}
@@ -271,7 +283,7 @@ func (s metricSorter) Less(i, j int) bool {
 	return s[i].GetTimestampMs() < s[j].GetTimestampMs()
 }
 
-// normalizeMetricFamilies returns a MetricFamily slice whith empty
+// normalizeMetricFamilies returns a MetricFamily slice with empty
 // MetricFamilies pruned and the remaining MetricFamilies sorted by name within
 // the slice, with the contained Metrics sorted within each MetricFamily.
 func normalizeMetricFamilies(metricFamiliesByName map[string]*dto.MetricFamily) []*dto.MetricFamily {

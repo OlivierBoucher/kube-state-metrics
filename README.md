@@ -1,3 +1,7 @@
+# Fork
+
+This is our fork of kube-state-metrics since the maintainers of kubernetes would not accept my compatibility fixes for stackdriver.
+
 # Overview
 
 kube-state-metrics is a simple service that listens to the Kubernetes API
